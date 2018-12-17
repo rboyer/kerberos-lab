@@ -1,0 +1,5 @@
+FROM local/kerb-client:latest
+
+COPY kerberos-lab /usr/local/bin/kerberos-lab
+
+CMD ["/usr/local/bin/kerberos-lab"]
