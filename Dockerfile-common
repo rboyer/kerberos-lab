@@ -1,0 +1,9 @@
+FROM ubuntu:bionic
+
+# https://help.ubuntu.com/community/Kerberos
+
+RUN apt-get update -y
+
+ENV DEBIAN_FRONTEND noninteractive
+
+RUN apt-get install -y apt-utils vim-nox

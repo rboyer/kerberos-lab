@@ -1,0 +1,16 @@
+FROM local/kerb-common:latest
+
+RUN apt-get install -y krb5-kdc krb5-admin-server
+
+RUN rm -rf /var/lib/krb5kdc /etc/krb5kdc
+
+RUN mkdir -p /var/lib/krb5kdc /etc/krb5kdc
+
+COPY ./config/etc--krb5kdc--kdc.conf /etc/krb5kdc/kdc.conf
+COPY ./config/etc--krb5kdc--kadm5.acl /etc/krb5kdc/kadm5.acl
+
+COPY ./config/etc--krb5.conf /etc/krb5.conf
+
+COPY ./scripts/kdc.sh /usr/local/bin/kdc.sh
+
+ENTRYPOINT [ "/usr/local/bin/kdc.sh" ]

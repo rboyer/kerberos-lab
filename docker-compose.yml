@@ -1,0 +1,46 @@
+# this just sets up the consul layer
+version: '3.7'
+
+networks:
+  dc1:
+    ipam:
+      driver: default
+      config:
+        - subnet: '10.10.10.0/24'
+
+services:
+  kdc:
+    container_name: 'kdc'
+    image: gcr.io/google_containers/pause:1.0
+    restart: always
+    hostname: kdc
+    domainname: kerb.local
+    ports:
+      - '750'
+      - '88'
+    networks:
+      dc1:
+        ipv4_address: '10.10.10.10'
+
+  kdc-kdc:
+    network_mode: 'service:kdc'
+    depends_on:
+      - kdc
+    image: local/kerb-server:latest
+    command:
+      - 'kdc'
+    volumes:
+      - 'kdc:/var/lib/krb5kdc'
+
+  kdc-kadmin:
+    network_mode: 'service:kdc'
+    depends_on:
+      - kdc-kdc
+    image: local/kerb-server:latest
+    command:
+      - 'kadmin'
+    volumes:
+      - 'kdc:/var/lib/krb5kdc'
+
+volumes:
+  kdc:

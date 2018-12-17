@@ -1,0 +1,5 @@
+FROM local/kerb-common:latest
+
+RUN apt-get install -y krb5-user krb5-config
+
+COPY ./config/etc--krb5.conf /etc/krb5.conf
