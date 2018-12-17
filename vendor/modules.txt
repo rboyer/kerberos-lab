@@ -1,0 +1,2 @@
+# gopkg.in/jcmturner/gokrb5.v6 v6.1.0
+gopkg.in/jcmturner/gokrb5.v6
