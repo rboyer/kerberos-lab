@@ -2,6 +2,7 @@ module github.com/rboyer/kerberos-lab
 
 require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/hashicorp/go-cleanhttp v0.5.0
 	github.com/hashicorp/go-uuid v1.0.0 // indirect
 	github.com/jcmturner/gofork v0.0.0-20180107083740-2aebee971930 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect

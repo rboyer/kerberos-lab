@@ -20,7 +20,7 @@ docker: static
 	docker build -t local/kerb-demo -f ./Dockerfile-demo .
 
 .PHONY: up
-up:
+up: docker
 	docker-compose up -d
 
 .PHONY: down
@@ -29,4 +29,6 @@ down:
 
 .PHONY: demo
 demo: docker
-	docker run --rm -it --net=container:kdc local/kerb-demo
+	mkdir -p keytabs
+	docker cp $$(docker-compose ps -q kdc-kadmin):/tmp/fakeweb.keytab keytabs
+	docker run --rm -it --net=container:kdc -v "$$(pwd)/keytabs:/keytabs:ro" local/kerb-demo

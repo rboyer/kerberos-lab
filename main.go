@@ -1,83 +1,111 @@
 package main
 
 import (
+	"fmt"
+	"io/ioutil"
 	"log"
+	"net/http"
+	"strings"
 
-	kclient "gopkg.in/jcmturner/gokrb5.v6/client"
-	kconfig "gopkg.in/jcmturner/gokrb5.v6/config"
-	kcrypto "gopkg.in/jcmturner/gokrb5.v6/crypto"
-	kmessages "gopkg.in/jcmturner/gokrb5.v6/messages"
-	ktypes "gopkg.in/jcmturner/gokrb5.v6/types"
+	cleanhttp "github.com/hashicorp/go-cleanhttp"
+	"gopkg.in/jcmturner/gokrb5.v6/keytab"
 )
 
 func main() {
-	cfg, err := kconfig.Load("/etc/krb5.conf")
-	if err != nil {
+	if err := run(); err != nil {
 		log.Fatal(err)
 	}
-	c := kclient.NewClientWithPassword("demo", "KERB.LOCAL", "demo")
-	c.WithConfig(cfg)
+}
 
-	err = c.Login()
-	if err != nil {
-		log.Fatal(err)
+func run() error {
+	var srv *ControlServer
+	{
+		kt, err := keytab.Load("/keytabs/fakeweb.keytab")
+		if err != nil {
+			return fmt.Errorf("[server] kclient parse keytab error: %v", err)
+		}
+
+		kc, err := NewKerberosClientWithKeytab("HTTP/fakeweb", "KERB.LOCAL", kt)
+		if err != nil {
+			return fmt.Errorf("[server] kclient create error: %v", err)
+		}
+
+		err = kc.Login()
+		if err != nil {
+			return fmt.Errorf("[server] kclient login error: %v", err)
+		}
+		defer kc.Destroy()
+
+		srv = &ControlServer{kc: kc}
+
+		go func() {
+			if err := srv.Serve(); err != nil {
+				log.Fatal(err)
+			}
+		}()
 	}
-	defer c.Destroy()
+	_ = srv
 
-	// ==============
-	// 'demo' is going to dial 'demo2'
-	// ==============
+	var cli *Client
+	{
+		kc, err := NewKerberosClientWithPassword("demo", "KERB.LOCAL", "demo")
+		if err != nil {
+			return fmt.Errorf("[client] kclient create error: %v", err)
+		}
 
-	// https://github.com/jcmturner/gokrb5#generic-kerberos-client
-	//
-	// To authenticate to a service a client will need to request a service
-	// ticket for a Service Principal Name (SPN) and form into an AP_REQ
-	// message along with an authenticator encrypted with the session key that
-	// was delivered from the KDC along with the service ticket.
-	//
-	// Get the service ticket and session key for the service the client is
-	// authenticating to. The following method will use the client's cache
-	// either returning a valid cached ticket, renewing a cached ticket with
-	// the KDC or requesting a new ticket from the KDC. Therefore the
-	// GetServiceTicket method can be continually used for the most efficient
-	// interaction with the KDC.
-	tkt, key, err := c.GetServiceTicket("demo2")
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.Printf("GetServiceTicket(demo2) got t=[%#v] k=[%#v]", tkt, key)
+		err = kc.Login()
+		if err != nil {
+			return fmt.Errorf("[client] kclient login error: %v", err)
+		}
+		defer kc.Destroy()
 
-	// The steps after this will be specific to the application protocol but it
-	// will likely involve a client/server Authentication Protocol exchange (AP
-	// exchange). This will involve these steps:
-
-	// Generate a new Authenticator and generate a sequence number and subkey:
-	auth, err := ktypes.NewAuthenticator(c.Credentials.Realm, c.Credentials.CName)
-	if err != nil {
-		log.Fatal(err)
-	}
-	etype, err := kcrypto.GetEtype(key.KeyType)
-	if err != nil {
-		log.Fatal(err)
-	}
-	err = auth.GenerateSeqNumberAndSubKey(key.KeyType, etype.GetKeyByteSize())
-	if err != nil {
-		log.Fatal(err)
+		cli = &Client{kc: kc}
 	}
 
-	// Set the checksum on the authenticator The checksum is an application
-	// specific value. Set as follows:
-	// auth.Cksum = ktypes.Checksum{
-	// 	CksumType: checksumIDint,
-	// 	Checksum:  checksumBytesSlice,
+	// cp, err := cli.GenerateAuthPayloadFor("fakeweb")
+	// if err != nil {
+	// 	return fmt.Errorf("[client] kclient payload generation error: %v", err)
 	// }
 
-	// Create the AP_REQ:
-	APReq, err := kmessages.NewAPReq(tkt, key, auth)
-	if err != nil {
-		log.Fatal(err)
+	// resp, err := srv.Login(cp)
+	// if err != nil {
+	// 	return fmt.Errorf("[client] login failed: %v", err)
+	// }
+	// _ = resp
+
+	{
+		data := strings.NewReader(`{"placeholder":true}`)
+		r, err := http.NewRequest("POST", "http://127.0.0.1:8080/login", data)
+		if err != nil {
+			return fmt.Errorf("[client] http request construction error: %v", err)
+		}
+
+		r.Header.Set("content-type", "application/json")
+
+		err = cli.kc.SetSPNEGOHeader(r, "HTTP/fakeweb")
+		if err != nil {
+			return fmt.Errorf("[client] http request SPNEGO header set error: %v", err)
+		}
+
+		hc := cleanhttp.DefaultClient()
+
+		res, err := hc.Do(r)
+		if err != nil {
+			return fmt.Errorf("[client] http Do error: %v", err)
+		}
+		defer res.Body.Close()
+
+		if res.StatusCode < 200 || res.StatusCode > 299 {
+			return fmt.Errorf("bogus status: got %v", res.Status)
+		}
+
+		got, err := ioutil.ReadAll(res.Body)
+		if err != nil {
+			return fmt.Errorf("[client] http body drain error: %v", err)
+		}
+		log.Printf("[client] got data: [%s]", string(got))
+
 	}
 
-	// Now send the AP_REQ to the service. How this is done will be specific to the application use case.
-	log.Printf("APReq for demo -> demo2 is: [%#v]", APReq)
+	return nil
 }

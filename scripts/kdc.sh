@@ -18,6 +18,8 @@ case "$1" in
         if [[ ! -f /var/lib/krb5kdc/init_done ]]; then
             echo "addprinc -pw admin admin" | kadmin.local
             echo "addprinc -pw demo demo" | kadmin.local
+            echo "addprinc -pw fakeweb HTTP/fakeweb" | kadmin.local
+            echo "ktadd -k /tmp/fakeweb.keytab HTTP/fakeweb" | kadmin.local
             touch /var/lib/krb5kdc/init_done
         fi
         exec /usr/sbin/kadmind -nofork
