@@ -7,6 +7,7 @@ all: docker up
 gomod:
 	GO111MODULE=on go mod tidy
 	GO111MODULE=on go mod vendor
+	GO111MODULE=on go mod download
 
 .PHONY: static
 static:

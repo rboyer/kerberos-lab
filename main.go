@@ -9,6 +9,7 @@ import (
 
 	cleanhttp "github.com/hashicorp/go-cleanhttp"
 	"gopkg.in/jcmturner/gokrb5.v6/keytab"
+	kservice "gopkg.in/jcmturner/gokrb5.v6/service"
 )
 
 func main() {
@@ -25,6 +26,7 @@ func run() error {
 			return fmt.Errorf("[server] kclient parse keytab error: %v", err)
 		}
 
+		// this client for the service may not be necessary
 		kc, err := NewKerberosClientWithKeytab("HTTP/fakeweb", "KERB.LOCAL", kt)
 		if err != nil {
 			return fmt.Errorf("[server] kclient create error: %v", err)
@@ -36,7 +38,10 @@ func run() error {
 		}
 		defer kc.Destroy()
 
-		srv = &ControlServer{kc: kc}
+		srv = &ControlServer{
+			kc:  kc,
+			cfg: kservice.NewConfig(kt),
+		}
 
 		go func() {
 			if err := srv.Serve(); err != nil {
